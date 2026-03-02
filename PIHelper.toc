@@ -2,8 +2,12 @@
 ## Title: PIHelper
 ## Notes: Save a preferred Power Infusion target and update a PI macro out of combat.
 ## Author: Crispy
-## Version: 0.1.0
 ## SavedVariables: PIHelperDB
+## Version: 1.0.0
+## X-Website: https://github.com/Nocturnal-Crispy/PIHelper
+## X-Repository: https://github.com/Nocturnal-Crispy/PIHelper
+## X-Github: Nocturnal-Crispy/PIHelper
+
 
 PIHelper.lua
 PITarget.lua
