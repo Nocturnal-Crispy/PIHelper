@@ -3,7 +3,7 @@ VERSION := $(shell grep '## Version' $(ADDON).toc | sed 's/.*: //')
 OUTDIR  := dist
 ZIPNAME := $(ADDON)-$(VERSION).zip
 
-WOW_ADDONS := $(HOME)/.steam/steam/steamapps/compatdata/2832488321/pfx/drive_c/Program\ Files\ \(x86\)/World\ of\ Warcraft/_retail_/Interface/AddOns
+WOW_ADDONS := $(HOME)/.steam/steam/steamapps/compatdata/2832488321/pfx/drive_c/Program Files (x86)/World of Warcraft/_retail_/Interface/AddOns
 
 .PHONY: release bump deploy tag clean
 

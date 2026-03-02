@@ -1,13 +1,12 @@
 -- PITarget.lua
--- Settings GUI: trinket blacklist, potion toggle, macro preview
+-- Settings GUI: trinket toggles, potion toggle, macro preview
 
 local FRAME_W  = 320
-local FRAME_H  = 390
+local FRAME_H  = 560
 local TITLE_H  = 28   -- approx height of BasicFrameTemplate title bar
 local PAD      = 10   -- left/right/bottom content padding
 
 -- ─── Main Frame ───────────────────────────────────────────────────────────────
--- Use BasicFrameTemplate (no Inset child) and parent content directly to f.
 
 local f = CreateFrame("Frame", "PIHelperFrame", UIParent, "BasicFrameTemplate")
 f:SetSize(FRAME_W, FRAME_H)
@@ -20,7 +19,6 @@ f:SetScript("OnDragStop", f.StopMovingOrSizing)
 f:SetClampedToScreen(true)
 f:Hide()
 
--- TitleText exists on BasicFrameTemplate but guard in case WoW changes it.
 if f.TitleText then
     f.TitleText:SetText("PIHelper")
 end
@@ -42,8 +40,6 @@ trinketHeader:SetPoint("TOPLEFT", targetHint, "BOTTOMLEFT", 0, -12)
 trinketHeader:SetText("On-Use Trinkets:")
 trinketHeader:SetTextColor(1, 0.82, 0)
 
--- Two rows, one per trinket slot (shown/hidden individually).
--- Labels created manually; don't rely on template internals.
 local trinketRows = {}
 for i, slot in ipairs({ 13, 14 }) do
     local cb = CreateFrame("CheckButton", nil, f, "UICheckButtonTemplate")
@@ -57,11 +53,7 @@ for i, slot in ipairs({ 13, 14 }) do
     cb:SetScript("OnClick", function(self)
         local t = PIHelper_Trinkets[self.slotID]
         if not t then return end
-        if self:GetChecked() then
-            PIHelperDB.blacklist[t.itemID] = nil
-        else
-            PIHelperDB.blacklist[t.itemID] = true
-        end
+        PIHelperDB.trinketEnabled[t.itemID] = self:GetChecked() and true or false
         PIHelper_UpdateMacro()
     end)
 
@@ -76,6 +68,13 @@ noTrinketLabel:Hide()
 -- ─── Potion Section ───────────────────────────────────────────────────────────
 -- Fixed 66px below trinketHeader — room for 2 trinket rows (26px each) + gap.
 
+local POTION_OPTIONS = {
+    "Draught of Rampant Abandon",
+    "Potion of Zealotry",
+    "Potion of Recklessness",
+    "Light's Potential",
+}
+
 local potionCheck = CreateFrame("CheckButton", nil, f, "UICheckButtonTemplate")
 potionCheck:SetPoint("TOPLEFT", trinketHeader, "BOTTOMLEFT", -2, -66)
 potionCheck:SetSize(24, 24)
@@ -84,35 +83,54 @@ local potionLabel = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
 potionLabel:SetPoint("LEFT", potionCheck, "RIGHT", 4, 0)
 potionLabel:SetText("Use Combat Potion")
 
-local potionInput = CreateFrame("EditBox", nil, f, "InputBoxTemplate")
-potionInput:SetSize(FRAME_W - 50, 22)
-potionInput:SetPoint("TOPLEFT", potionCheck, "BOTTOMLEFT", 20, -2)
-potionInput:SetAutoFocus(false)
-potionInput:SetMaxLetters(100)
-potionInput:Hide()
+-- Radio buttons — one per potion option, shown when potionCheck is enabled.
+local potionRadios = {}
+for i, name in ipairs(POTION_OPTIONS) do
+    local rb = CreateFrame("CheckButton", nil, f, "UICheckButtonTemplate")
+    rb:SetPoint("TOPLEFT", potionCheck, "BOTTOMLEFT", 20, -((i - 1) * 24) - 4)
+    rb:SetSize(20, 20)
+    rb.potionName = name
 
-local function SavePotionName(self)
-    PIHelperDB.potionName = self:GetText()
-    PIHelper_UpdateMacro()
+    local lbl = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    lbl:SetPoint("LEFT", rb, "RIGHT", 4, 0)
+    lbl:SetText(name)
+
+    rb:SetScript("OnClick", function(self)
+        for _, r in ipairs(potionRadios) do
+            r.button:SetChecked(r.button == self)
+        end
+        PIHelperDB.potionName = self.potionName
+        PIHelper_UpdateMacro()
+    end)
+
+    rb:Hide()
+    lbl:Hide()
+
+    potionRadios[i] = { button = rb, label = lbl }
 end
 
-potionInput:SetScript("OnEnterPressed", function(self)
-    self:ClearFocus()
-    SavePotionName(self)
-end)
-potionInput:SetScript("OnEditFocusLost", SavePotionName)
+local function SetPotionRadiosShown(shown)
+    for _, r in ipairs(potionRadios) do
+        r.button:SetShown(shown)
+        r.label:SetShown(shown)
+    end
+end
 
 potionCheck:SetScript("OnClick", function(self)
     PIHelperDB.usePotion = self:GetChecked()
-    potionInput:SetShown(PIHelperDB.usePotion)
+    SetPotionRadiosShown(PIHelperDB.usePotion)
+    if PIHelperDB.usePotion and PIHelperDB.potionName == "" then
+        PIHelperDB.potionName = POTION_OPTIONS[1]
+    end
     PIHelper_UpdateMacro()
 end)
 
 -- ─── Macro Preview ────────────────────────────────────────────────────────────
--- Fixed 130px below trinketHeader — clears trinkets + potion + input + gap.
+-- 295px below trinketHeader — clears trinkets (66) + potion check (24) +
+-- 8 radio rows (192) + gaps (13).
 
 local previewHeader = f:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-previewHeader:SetPoint("TOPLEFT", trinketHeader, "BOTTOMLEFT", 0, -130)
+previewHeader:SetPoint("TOPLEFT", trinketHeader, "BOTTOMLEFT", 0, -295)
 previewHeader:SetText("Macro Preview:")
 previewHeader:SetTextColor(0.6, 0.6, 0.6)
 
@@ -149,7 +167,7 @@ function PIHelper_RefreshGUI()
             row.check:Show()
             row.label:Show()
             row.label:SetText(t.name .. " (slot " .. slot .. ")")
-            row.check:SetChecked(not db.blacklist[t.itemID])
+            row.check:SetChecked(db.trinketEnabled[t.itemID] ~= false)
         else
             row.check:Hide()
             row.label:Hide()
@@ -159,19 +177,22 @@ function PIHelper_RefreshGUI()
 
     -- Potion
     potionCheck:SetChecked(db.usePotion)
-    potionInput:SetShown(db.usePotion)
-    potionInput:SetText(db.potionName or "")
+    SetPotionRadiosShown(db.usePotion)
+    for _, r in ipairs(potionRadios) do
+        r.button:SetChecked(r.button.potionName == db.potionName)
+    end
 
     -- Macro preview
     local lines = {}
     for _, slot in ipairs({ 13, 14 }) do
         local t = PIHelper_Trinkets[slot]
-        if t and not db.blacklist[t.itemID] then
+        if t and db.trinketEnabled[t.itemID] ~= false then
             lines[#lines + 1] = "/use " .. slot
         end
     end
     if db.usePotion and db.potionName ~= "" then
         lines[#lines + 1] = "/use " .. db.potionName
+        lines[#lines + 1] = "/use Tempered " .. db.potionName
     end
     local clause = (db.target ~= "") and ("[@" .. db.target .. ",exists,nodead]") or ""
     lines[#lines + 1] = "/cast [@mouseover,help,nodead]" .. clause .. "[] Power Infusion"

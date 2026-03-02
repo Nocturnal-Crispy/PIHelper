@@ -12,10 +12,10 @@ PIHelper_Trinkets = {}
 local pendingMacroUpdate = false
 
 local DEFAULTS = {
-    target     = "",
-    blacklist  = {},
-    usePotion  = false,
-    potionName = "",
+    target         = "",
+    trinketEnabled = {},
+    usePotion      = false,
+    potionName     = "",
 }
 
 -- ─── Trinket Scanning ─────────────────────────────────────────────────────────
@@ -43,13 +43,14 @@ local function BuildMacroBody()
 
     for _, slot in ipairs(TRINKET_SLOTS) do
         local t = PIHelper_Trinkets[slot]
-        if t and not db.blacklist[t.itemID] then
+        if t and db.trinketEnabled[t.itemID] ~= false then
             lines[#lines + 1] = "/use " .. slot
         end
     end
 
     if db.usePotion and db.potionName ~= "" then
         lines[#lines + 1] = "/use " .. db.potionName
+        lines[#lines + 1] = "/use Tempered " .. db.potionName
     end
 
     local targetClause = ""
@@ -104,8 +105,8 @@ frame:SetScript("OnEvent", function(_, event, arg1)
         for k, v in pairs(DEFAULTS) do
             if PIHelperDB[k] == nil then PIHelperDB[k] = v end
         end
-        if type(PIHelperDB.blacklist) ~= "table" then
-            PIHelperDB.blacklist = {}
+        if type(PIHelperDB.trinketEnabled) ~= "table" then
+            PIHelperDB.trinketEnabled = {}
         end
 
         ScanTrinkets()
