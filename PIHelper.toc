@@ -1,0 +1,9 @@
+## Interface: 120001
+## Title: PIHelper
+## Notes: Save a preferred Power Infusion target and update a PI macro out of combat.
+## Author: Crispy
+## Version: 0.1.0
+## SavedVariables: PIHelperDB
+
+PIHelper.lua
+PITarget.lua
