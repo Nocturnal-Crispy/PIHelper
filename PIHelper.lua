@@ -129,9 +129,42 @@ end)
 
 -- ─── Slash Commands ───────────────────────────────────────────────────────────
 
+local function PrintStatus()
+    local p = "|cff00ccffPIHelper:|r "
+    print(p .. "=== Status ===")
+    print(p .. "Addon loaded: |cff00ff00yes|r")
+
+    local dbOk = type(PIHelperDB) == "table"
+    print(p .. "SavedVariables: " .. (dbOk and "|cff00ff00loaded|r" or "|cffff4444missing|r"))
+
+    local _, class = UnitClass("player")
+    local _, spec  = GetSpecializationInfo(GetSpecialization() or 0)
+    print(p .. "Class: |cffffd700" .. (class or "?") .. "|r  Spec: |cffffd700" .. (spec or "?") .. "|r")
+
+    local target = (dbOk and PIHelperDB.target ~= "") and PIHelperDB.target or "(none)"
+    print(p .. "PI target: |cffffd700" .. target .. "|r")
+
+    print(p .. "In combat: " .. (InCombatLockdown() and "|cffff4444yes|r" or "|cff00ff00no|r"))
+    print(p .. "Pending macro update: " .. (pendingMacroUpdate and "|cffffff00yes|r" or "|cff00ff00no|r"))
+
+    local idx = GetMacroIndexByName(MACRO_NAME)
+    print(p .. "Macro \"" .. MACRO_NAME .. "\": " .. (idx > 0 and "|cff00ff00exists (slot " .. idx .. ")|r" or "|cffff4444not found|r"))
+
+    local tCount = 0
+    for _ in pairs(PIHelper_Trinkets) do tCount = tCount + 1 end
+    print(p .. "On-use trinkets found: |cffffd700" .. tCount .. "|r")
+end
+
 SLASH_PIH1 = "/pih"
 SLASH_PIH2 = "/pihelper"
-SlashCmdList["PIH"] = function()
+SlashCmdList["PIH"] = function(msg)
+    local cmd = msg and msg:lower():match("^%s*(%S+)") or ""
+
+    if cmd == "status" then
+        PrintStatus()
+        return
+    end
+
     if UnitExists("target") and UnitIsPlayer("target") then
         local name = UnitName("target")
         PIHelperDB.target = name
