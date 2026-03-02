@@ -5,7 +5,7 @@ ZIPNAME := $(ADDON)-$(VERSION).zip
 
 WOW_ADDONS := $(HOME)/.steam/steam/steamapps/compatdata/2832488321/pfx/drive_c/Program\ Files\ \(x86\)/World\ of\ Warcraft/_retail_/Interface/AddOns
 
-.PHONY: release deploy clean
+.PHONY: release deploy tag clean
 
 release: clean
 	@echo "Building $(ZIPNAME)..."
@@ -21,6 +21,12 @@ deploy:
 	mkdir -p "$$DEST"; \
 	cp *.lua *.toc "$$DEST/"; \
 	echo "Deployed to $$DEST"
+
+tag:
+	@echo "Tagging v$(VERSION) and pushing to GitHub..."
+	@git tag -a "v$(VERSION)" -m "Release v$(VERSION)"
+	@git push origin "v$(VERSION)"
+	@echo "GitHub Actions will build the release ZIP and attach it to the tag."
 
 clean:
 	@rm -rf $(OUTDIR)
