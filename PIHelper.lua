@@ -10,6 +10,7 @@ local TRINKET_SLOTS = { 13, 14 }
 PIHelper_Trinkets = {}
 
 local pendingMacroUpdate = false
+local pendingItemIDs    = {}
 
 local DEFAULTS = {
     target         = "",
@@ -22,6 +23,7 @@ local DEFAULTS = {
 
 local function ScanTrinkets()
     local found = {}
+    pendingItemIDs = {}
     for _, slot in ipairs(TRINKET_SLOTS) do
         local itemID = GetInventoryItemID("player", slot)
         if itemID then
@@ -29,6 +31,10 @@ local function ScanTrinkets()
             if spellName then
                 local itemName = GetItemInfo(itemID) or ("Item #" .. itemID)
                 found[slot] = { itemID = itemID, name = itemName }
+            else
+                -- Item data not in cache yet; request it so GET_ITEM_INFO_RECEIVED fires
+                GetItemInfo(itemID)
+                pendingItemIDs[itemID] = true
             end
         end
     end
@@ -96,6 +102,7 @@ local frame = CreateFrame("Frame")
 frame:RegisterEvent("ADDON_LOADED")
 frame:RegisterEvent("PLAYER_REGEN_ENABLED")
 frame:RegisterEvent("PLAYER_EQUIPMENT_CHANGED")
+frame:RegisterEvent("GET_ITEM_INFO_RECEIVED")
 
 frame:SetScript("OnEvent", function(_, event, arg1)
     if event == "ADDON_LOADED" then
@@ -123,6 +130,21 @@ frame:SetScript("OnEvent", function(_, event, arg1)
             PIHelper_UpdateMacro()
             if PIHelperFrame and PIHelperFrame:IsShown() and PIHelper_RefreshGUI then
                 PIHelper_RefreshGUI()
+            end
+        end
+
+    elseif event == "GET_ITEM_INFO_RECEIVED" then
+        -- arg1 is itemID (number), arg2 is success (bool)
+        if pendingItemIDs[arg1] then
+            pendingItemIDs[arg1] = nil
+            ScanTrinkets()
+            PIHelper_UpdateMacro()
+            if PIHelperFrame and PIHelperFrame:IsShown() and PIHelper_RefreshGUI then
+                PIHelper_RefreshGUI()
+            end
+            -- Unregister once all pending items are resolved
+            if not next(pendingItemIDs) then
+                frame:UnregisterEvent("GET_ITEM_INFO_RECEIVED")
             end
         end
     end
