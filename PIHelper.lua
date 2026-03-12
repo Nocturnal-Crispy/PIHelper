@@ -39,6 +39,13 @@ local function ScanTrinkets()
         end
     end
     PIHelper_Trinkets = found
+
+    -- Keep GET_ITEM_INFO_RECEIVED registered iff we have pending items
+    if next(pendingItemIDs) then
+        frame:RegisterEvent("GET_ITEM_INFO_RECEIVED")
+    else
+        frame:UnregisterEvent("GET_ITEM_INFO_RECEIVED")
+    end
 end
 
 -- ─── Macro Builder ────────────────────────────────────────────────────────────
@@ -100,9 +107,10 @@ end
 
 local frame = CreateFrame("Frame")
 frame:RegisterEvent("ADDON_LOADED")
+frame:RegisterEvent("PLAYER_LOGIN")
 frame:RegisterEvent("PLAYER_REGEN_ENABLED")
 frame:RegisterEvent("PLAYER_EQUIPMENT_CHANGED")
-frame:RegisterEvent("GET_ITEM_INFO_RECEIVED")
+-- GET_ITEM_INFO_RECEIVED is registered/unregistered dynamically by ScanTrinkets()
 
 frame:SetScript("OnEvent", function(_, event, arg1)
     if event == "ADDON_LOADED" then
@@ -116,6 +124,11 @@ frame:SetScript("OnEvent", function(_, event, arg1)
             PIHelperDB.trinketEnabled = {}
         end
 
+        ScanTrinkets()
+        PIHelper_UpdateMacro()
+
+    elseif event == "PLAYER_LOGIN" then
+        -- Item data is more likely cached by login; retry scan in case ADDON_LOADED was too early
         ScanTrinkets()
         PIHelper_UpdateMacro()
 
@@ -134,17 +147,13 @@ frame:SetScript("OnEvent", function(_, event, arg1)
         end
 
     elseif event == "GET_ITEM_INFO_RECEIVED" then
-        -- arg1 is itemID (number), arg2 is success (bool)
+        -- arg1 is itemID (number)
         if pendingItemIDs[arg1] then
-            pendingItemIDs[arg1] = nil
+            -- Re-scan now that this item's data is available; ScanTrinkets manages (un)registration
             ScanTrinkets()
             PIHelper_UpdateMacro()
             if PIHelperFrame and PIHelperFrame:IsShown() and PIHelper_RefreshGUI then
                 PIHelper_RefreshGUI()
-            end
-            -- Unregister once all pending items are resolved
-            if not next(pendingItemIDs) then
-                frame:UnregisterEvent("GET_ITEM_INFO_RECEIVED")
             end
         end
     end
