@@ -11,6 +11,7 @@ PIHelper_Trinkets = {}
 
 local pendingMacroUpdate = false
 local pendingItemIDs    = {}
+local frame  -- forward declaration; assigned below before any events fire
 
 local DEFAULTS = {
     target         = "",
@@ -105,7 +106,7 @@ end
 
 -- ─── Event Handler ────────────────────────────────────────────────────────────
 
-local frame = CreateFrame("Frame")
+frame = CreateFrame("Frame")
 frame:RegisterEvent("ADDON_LOADED")
 frame:RegisterEvent("PLAYER_LOGIN")
 frame:RegisterEvent("PLAYER_REGEN_ENABLED")
