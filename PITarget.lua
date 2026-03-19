@@ -192,7 +192,7 @@ function PIHelper_RefreshGUI()
     end
     if db.usePotion and db.potionName ~= "" then
         lines[#lines + 1] = "/use " .. db.potionName
-        lines[#lines + 1] = "/use Fleeting" .. db.potionName
+        lines[#lines + 1] = "/use Fleeting " .. db.potionName
     end
     local clause = (db.target ~= "") and ("[@" .. db.target .. ",exists,nodead]") or ""
     lines[#lines + 1] = "/cast [@mouseover,help,nodead]" .. clause .. "[] Power Infusion"
