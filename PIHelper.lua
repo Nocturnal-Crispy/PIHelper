@@ -64,7 +64,7 @@ local function BuildMacroBody()
 
     if db.usePotion and db.potionName ~= "" then
         lines[#lines + 1] = "/use " .. db.potionName
-        lines[#lines + 1] = "/use Tempered " .. db.potionName
+        lines[#lines + 1] = "/use Fleeting " .. db.potionName
     end
 
     local targetClause = ""
