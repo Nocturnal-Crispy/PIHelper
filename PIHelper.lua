@@ -14,10 +14,11 @@ local pendingItemIDs    = {}
 local frame  -- forward declaration; assigned below before any events fire
 
 local DEFAULTS = {
-    target         = "",
-    trinketEnabled = {},
-    usePotion      = false,
-    potionName     = "",
+    target           = "",
+    trinketEnabled   = {},
+    usePotion        = false,
+    potionName       = "",
+    useVampiricTouch = false,
 }
 
 -- ─── Trinket Scanning ─────────────────────────────────────────────────────────
@@ -65,6 +66,10 @@ local function BuildMacroBody()
     if db.usePotion and db.potionName ~= "" then
         lines[#lines + 1] = "/use Fleeting " .. db.potionName
         lines[#lines + 1] = "/use " .. db.potionName
+    end
+
+    if db.useVampiricTouch then
+        lines[#lines + 1] = "/cast Vampiric Touch"
     end
 
     local targetClause = ""
