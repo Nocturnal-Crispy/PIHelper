@@ -133,10 +133,10 @@ vtCheck:SetSize(24, 24)
 
 local vtLabel = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
 vtLabel:SetPoint("LEFT", vtCheck, "RIGHT", 4, 0)
-vtLabel:SetText("Use Vampiric Touch")
+vtLabel:SetText("Use Vampiric Embrace")
 
 vtCheck:SetScript("OnClick", function(self)
-    PIHelperDB.useVampiricTouch = self:GetChecked() and true or false
+    PIHelperDB.useVampiricEmbrace = self:GetChecked() and true or false
     PIHelper_UpdateMacro()
 end)
 
@@ -198,7 +198,7 @@ function PIHelper_RefreshGUI()
     end
 
     -- Vampiric Touch
-    vtCheck:SetChecked(db.useVampiricTouch)
+    vtCheck:SetChecked(db.useVampiricEmbrace)
 
     -- Macro preview
     local lines = {}
@@ -212,8 +212,8 @@ function PIHelper_RefreshGUI()
         lines[#lines + 1] = "/use Fleeting " .. db.potionName
         lines[#lines + 1] = "/use " .. db.potionName
     end
-    if db.useVampiricTouch then
-        lines[#lines + 1] = "/cast Vampiric Touch"
+    if db.useVampiricEmbrace then
+        lines[#lines + 1] = "/cast Vampiric Embrace"
     end
     local clause = (db.target ~= "") and ("[@" .. db.target .. ",exists,nodead]") or ""
     lines[#lines + 1] = "/cast [@mouseover,help,nodead]" .. clause .. "[] Power Infusion"

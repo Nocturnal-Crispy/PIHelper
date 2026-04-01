@@ -18,7 +18,7 @@ local DEFAULTS = {
     trinketEnabled   = {},
     usePotion        = false,
     potionName       = "",
-    useVampiricTouch = false,
+    useVampiricEmbrace = false,
 }
 
 -- ─── Trinket Scanning ─────────────────────────────────────────────────────────
@@ -68,8 +68,8 @@ local function BuildMacroBody()
         lines[#lines + 1] = "/use " .. db.potionName
     end
 
-    if db.useVampiricTouch then
-        lines[#lines + 1] = "/cast Vampiric Touch"
+    if db.useVampiricEmbrace then
+        lines[#lines + 1] = "/cast Vampiric Embrace"
     end
 
     local targetClause = ""
