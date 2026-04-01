@@ -2,7 +2,7 @@
 -- Settings GUI: trinket toggles, potion toggle, macro preview
 
 local FRAME_W  = 320
-local FRAME_H  = 560
+local FRAME_H  = 590
 local TITLE_H  = 28   -- approx height of BasicFrameTemplate title bar
 local PAD      = 10   -- left/right/bottom content padding
 
@@ -125,12 +125,27 @@ potionCheck:SetScript("OnClick", function(self)
     PIHelper_UpdateMacro()
 end)
 
+-- ─── Vampiric Touch Section ──────────────────────────────────────────────────
+
+local vtCheck = CreateFrame("CheckButton", nil, f, "UICheckButtonTemplate")
+vtCheck:SetPoint("TOPLEFT", trinketHeader, "BOTTOMLEFT", -2, -195)
+vtCheck:SetSize(24, 24)
+
+local vtLabel = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+vtLabel:SetPoint("LEFT", vtCheck, "RIGHT", 4, 0)
+vtLabel:SetText("Use Vampiric Touch")
+
+vtCheck:SetScript("OnClick", function(self)
+    PIHelperDB.useVampiricTouch = self:GetChecked() and true or false
+    PIHelper_UpdateMacro()
+end)
+
 -- ─── Macro Preview ────────────────────────────────────────────────────────────
--- 295px below trinketHeader — clears trinkets (66) + potion check (24) +
--- 8 radio rows (192) + gaps (13).
+-- 325px below trinketHeader — clears trinkets (66) + potion check (24) +
+-- 8 radio rows (192) + VT check (30) + gaps (13).
 
 local previewHeader = f:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-previewHeader:SetPoint("TOPLEFT", trinketHeader, "BOTTOMLEFT", 0, -295)
+previewHeader:SetPoint("TOPLEFT", trinketHeader, "BOTTOMLEFT", 0, -325)
 previewHeader:SetText("Macro Preview:")
 previewHeader:SetTextColor(0.6, 0.6, 0.6)
 
@@ -182,6 +197,9 @@ function PIHelper_RefreshGUI()
         r.button:SetChecked(r.button.potionName == db.potionName)
     end
 
+    -- Vampiric Touch
+    vtCheck:SetChecked(db.useVampiricTouch)
+
     -- Macro preview
     local lines = {}
     for _, slot in ipairs({ 13, 14 }) do
@@ -193,6 +211,9 @@ function PIHelper_RefreshGUI()
     if db.usePotion and db.potionName ~= "" then
         lines[#lines + 1] = "/use Fleeting " .. db.potionName
         lines[#lines + 1] = "/use " .. db.potionName
+    end
+    if db.useVampiricTouch then
+        lines[#lines + 1] = "/cast Vampiric Touch"
     end
     local clause = (db.target ~= "") and ("[@" .. db.target .. ",exists,nodead]") or ""
     lines[#lines + 1] = "/cast [@mouseover,help,nodead]" .. clause .. "[] Power Infusion"
