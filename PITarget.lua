@@ -6,6 +6,15 @@ local FRAME_H  = 590
 local TITLE_H  = 28   -- approx height of BasicFrameTemplate title bar
 local PAD      = 10   -- left/right/bottom content padding
 
+local TRINKET_SLOTS = { 13, 14 } -- same slots PIHelper.lua scans; kept in sync manually
+
+-- Layout cursor constants — each section advances cursorY by its own row
+-- count, so adding/removing rows (e.g. POTION_OPTIONS entries) never requires
+-- hand-recalculating the offsets of sections below it.
+local ROW_H         = 24  -- checkbox / radio row height+spacing
+local TRINKET_ROW_H = 26  -- trinket row height+spacing
+local SECTION_GAP   = 14  -- vertical gap between sections
+
 -- ─── Main Frame ───────────────────────────────────────────────────────────────
 
 local f = CreateFrame("Frame", "PIHelperFrame", UIParent, "BasicFrameTemplate")
@@ -15,12 +24,31 @@ f:SetMovable(true)
 f:EnableMouse(true)
 f:RegisterForDrag("LeftButton")
 f:SetScript("OnDragStart", f.StartMoving)
-f:SetScript("OnDragStop", f.StopMovingOrSizing)
+f:SetScript("OnDragStop", function(self)
+    self:StopMovingOrSizing()
+    local point, _, relPoint, x, y = self:GetPoint()
+    PIHelperDB.framePos = { point = point, relPoint = relPoint, x = x, y = y }
+end)
 f:SetClampedToScreen(true)
 f:Hide()
 
+-- Let ESC close the frame (and not fall through to the game menu).
+tinsert(UISpecialFrames, "PIHelperFrame")
+
 if f.TitleText then
     f.TitleText:SetText("PIHelper")
+end
+
+-- Restore last-dragged position. Called from PIHelper.lua's ADDON_LOADED
+-- handler once PIHelperDB is guaranteed to exist.
+function PIHelper_RestoreFramePosition()
+    local p = PIHelperDB and PIHelperDB.framePos
+    if not p then return end
+    f:ClearAllPoints()
+    -- ponytail: assumes relativeTo is always UIParent (true for this frame,
+    -- which is never anchored to anything else). If that changes, save/restore
+    -- relativeTo too instead of hardcoding UIParent here.
+    f:SetPoint(p.point, UIParent, p.relPoint, p.x, p.y)
 end
 
 -- ─── Target Display ───────────────────────────────────────────────────────────
@@ -33,17 +61,37 @@ local targetHint = f:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
 targetHint:SetPoint("TOPLEFT", targetLabel, "BOTTOMLEFT", 0, -2)
 targetHint:SetText("Target a player and use /pih to change")
 
+local setTargetBtn = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
+setTargetBtn:SetSize(112, 22)
+setTargetBtn:SetPoint("TOPLEFT", targetHint, "BOTTOMLEFT", 0, -8)
+setTargetBtn:SetText("Set from Target")
+setTargetBtn:SetScript("OnClick", function()
+    PIHelper_SetTargetFromUnit()
+end)
+
+local clearTargetBtn = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
+clearTargetBtn:SetSize(60, 22)
+clearTargetBtn:SetPoint("LEFT", setTargetBtn, "RIGHT", 6, 0)
+clearTargetBtn:SetText("Clear")
+clearTargetBtn:SetScript("OnClick", function()
+    PIHelperDB.target = ""
+    PIHelper_UpdateMacro()
+    if PIHelper_RefreshGUI then PIHelper_RefreshGUI() end
+end)
+
 -- ─── Trinket Section ──────────────────────────────────────────────────────────
 
 local trinketHeader = f:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-trinketHeader:SetPoint("TOPLEFT", targetHint, "BOTTOMLEFT", 0, -12)
+trinketHeader:SetPoint("TOPLEFT", setTargetBtn, "BOTTOMLEFT", 0, -12)
 trinketHeader:SetText("On-Use Trinkets:")
 trinketHeader:SetTextColor(1, 0.82, 0)
 
+local cursorY = 0 -- offset (negative) from trinketHeader:BOTTOMLEFT for the next section
+
 local trinketRows = {}
-for i, slot in ipairs({ 13, 14 }) do
+for i, slot in ipairs(TRINKET_SLOTS) do
     local cb = CreateFrame("CheckButton", nil, f, "UICheckButtonTemplate")
-    cb:SetPoint("TOPLEFT", trinketHeader, "BOTTOMLEFT", -2, -((i - 1) * 26) - 4)
+    cb:SetPoint("TOPLEFT", trinketHeader, "BOTTOMLEFT", -2, cursorY - ((i - 1) * TRINKET_ROW_H) - 4)
     cb:SetSize(24, 24)
     cb.slotID = slot
 
@@ -59,6 +107,7 @@ for i, slot in ipairs({ 13, 14 }) do
 
     trinketRows[slot] = { check = cb, label = lbl }
 end
+cursorY = cursorY - (#TRINKET_SLOTS * TRINKET_ROW_H) - SECTION_GAP
 
 local noTrinketLabel = f:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
 noTrinketLabel:SetPoint("TOPLEFT", trinketHeader, "BOTTOMLEFT", 4, -8)
@@ -66,7 +115,6 @@ noTrinketLabel:SetText("No on-use trinkets detected.")
 noTrinketLabel:Hide()
 
 -- ─── Potion Section ───────────────────────────────────────────────────────────
--- Fixed 66px below trinketHeader — room for 2 trinket rows (26px each) + gap.
 
 local POTION_OPTIONS = {
     "Draught of Rampant Abandon",
@@ -76,8 +124,9 @@ local POTION_OPTIONS = {
 }
 
 local potionCheck = CreateFrame("CheckButton", nil, f, "UICheckButtonTemplate")
-potionCheck:SetPoint("TOPLEFT", trinketHeader, "BOTTOMLEFT", -2, -66)
+potionCheck:SetPoint("TOPLEFT", trinketHeader, "BOTTOMLEFT", -2, cursorY)
 potionCheck:SetSize(24, 24)
+cursorY = cursorY - ROW_H
 
 local potionLabel = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
 potionLabel:SetPoint("LEFT", potionCheck, "RIGHT", 4, 0)
@@ -87,7 +136,7 @@ potionLabel:SetText("Use Combat Potion")
 local potionRadios = {}
 for i, name in ipairs(POTION_OPTIONS) do
     local rb = CreateFrame("CheckButton", nil, f, "UICheckButtonTemplate")
-    rb:SetPoint("TOPLEFT", potionCheck, "BOTTOMLEFT", 20, -((i - 1) * 24) - 4)
+    rb:SetPoint("TOPLEFT", potionCheck, "BOTTOMLEFT", 20, -((i - 1) * ROW_H) - 4)
     rb:SetSize(20, 20)
     rb.potionName = name
 
@@ -108,6 +157,7 @@ for i, name in ipairs(POTION_OPTIONS) do
 
     potionRadios[i] = { button = rb, label = lbl }
 end
+cursorY = cursorY - (#POTION_OPTIONS * ROW_H) - SECTION_GAP
 
 local function SetPotionRadiosShown(shown)
     for _, r in ipairs(potionRadios) do
@@ -125,27 +175,26 @@ potionCheck:SetScript("OnClick", function(self)
     PIHelper_UpdateMacro()
 end)
 
--- ─── Vampiric Touch Section ──────────────────────────────────────────────────
+-- ─── Vampiric Embrace Section ─────────────────────────────────────────────────
 
-local vtCheck = CreateFrame("CheckButton", nil, f, "UICheckButtonTemplate")
-vtCheck:SetPoint("TOPLEFT", trinketHeader, "BOTTOMLEFT", -2, -195)
-vtCheck:SetSize(24, 24)
+local vampiricEmbraceCheck = CreateFrame("CheckButton", nil, f, "UICheckButtonTemplate")
+vampiricEmbraceCheck:SetPoint("TOPLEFT", trinketHeader, "BOTTOMLEFT", -2, cursorY)
+vampiricEmbraceCheck:SetSize(24, 24)
+cursorY = cursorY - ROW_H - SECTION_GAP
 
-local vtLabel = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-vtLabel:SetPoint("LEFT", vtCheck, "RIGHT", 4, 0)
-vtLabel:SetText("Use Vampiric Embrace")
+local vampiricEmbraceLabel = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+vampiricEmbraceLabel:SetPoint("LEFT", vampiricEmbraceCheck, "RIGHT", 4, 0)
+vampiricEmbraceLabel:SetText("Use Vampiric Embrace")
 
-vtCheck:SetScript("OnClick", function(self)
+vampiricEmbraceCheck:SetScript("OnClick", function(self)
     PIHelperDB.useVampiricEmbrace = self:GetChecked() and true or false
     PIHelper_UpdateMacro()
 end)
 
 -- ─── Macro Preview ────────────────────────────────────────────────────────────
--- 325px below trinketHeader — clears trinkets (66) + potion check (24) +
--- 8 radio rows (192) + VT check (30) + gaps (13).
 
 local previewHeader = f:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-previewHeader:SetPoint("TOPLEFT", trinketHeader, "BOTTOMLEFT", 0, -325)
+previewHeader:SetPoint("TOPLEFT", trinketHeader, "BOTTOMLEFT", 0, cursorY)
 previewHeader:SetText("Macro Preview:")
 previewHeader:SetTextColor(0.6, 0.6, 0.6)
 
@@ -174,7 +223,7 @@ function PIHelper_RefreshGUI()
 
     -- Trinket rows
     local anyFound = false
-    for _, slot in ipairs({ 13, 14 }) do
+    for _, slot in ipairs(TRINKET_SLOTS) do
         local row = trinketRows[slot]
         local t   = PIHelper_Trinkets[slot]
         if t then
@@ -197,12 +246,12 @@ function PIHelper_RefreshGUI()
         r.button:SetChecked(r.button.potionName == db.potionName)
     end
 
-    -- Vampiric Touch
-    vtCheck:SetChecked(db.useVampiricEmbrace)
+    -- Vampiric Embrace
+    vampiricEmbraceCheck:SetChecked(db.useVampiricEmbrace)
 
     -- Macro preview
     local lines = {}
-    for _, slot in ipairs({ 13, 14 }) do
+    for _, slot in ipairs(TRINKET_SLOTS) do
         local t = PIHelper_Trinkets[slot]
         if t and db.trinketEnabled[t.itemID] ~= false then
             lines[#lines + 1] = "/use " .. slot

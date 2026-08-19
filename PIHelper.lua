@@ -135,6 +135,8 @@ frame:SetScript("OnEvent", function(_, event, arg1)
             PIHelperDB.trinketEnabled = {}
         end
 
+        if PIHelper_RestoreFramePosition then PIHelper_RestoreFramePosition() end
+
         ScanTrinkets()
         PIHelper_UpdateMacro()
 
@@ -198,6 +200,26 @@ local function PrintStatus()
     print(p .. "On-use trinkets found: |cffffd700" .. tCount .. "|r")
 end
 
+-- Shared by the /pih slash command and the GUI's "Set from Target" button.
+-- Uses GetUnitName(unit, true) rather than UnitName() so cross-realm targets
+-- (M+/pug raids) are stored as "Name-Realm" and still resolve in the macro.
+function PIHelper_SetTargetFromUnit()
+    if not (UnitExists("target") and UnitIsPlayer("target")) then
+        print("|cffff4444PIHelper:|r No valid target.")
+        return false
+    end
+
+    local name = GetUnitName("target", true)
+    PIHelperDB.target = name
+    PIHelper_UpdateMacro()
+    print("|cff00ccffPIHelper:|r PI target set to |cffffd700" .. name .. "|r")
+
+    if PIHelperFrame and PIHelperFrame:IsShown() and PIHelper_RefreshGUI then
+        PIHelper_RefreshGUI()
+    end
+    return true
+end
+
 SLASH_PIH1 = "/pih"
 SLASH_PIH2 = "/pihelper"
 SlashCmdList["PIH"] = function(msg)
@@ -209,10 +231,7 @@ SlashCmdList["PIH"] = function(msg)
     end
 
     if UnitExists("target") and UnitIsPlayer("target") then
-        local name = UnitName("target")
-        PIHelperDB.target = name
-        PIHelper_UpdateMacro()
-        print("|cff00ccffPIHelper:|r PI target set to |cffffd700" .. name .. "|r")
+        PIHelper_SetTargetFromUnit()
     else
         if PIHelperFrame then
             if PIHelperFrame:IsShown() then
