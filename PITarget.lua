@@ -6,8 +6,6 @@ local FRAME_H  = 590
 local TITLE_H  = 28   -- approx height of BasicFrameTemplate title bar
 local PAD      = 10   -- left/right/bottom content padding
 
-local TRINKET_SLOTS = { 13, 14 } -- same slots PIHelper.lua scans; kept in sync manually
-
 -- Layout cursor constants — each section advances cursorY by its own row
 -- count, so adding/removing rows (e.g. POTION_OPTIONS entries) never requires
 -- hand-recalculating the offsets of sections below it.
@@ -45,9 +43,8 @@ function PIHelper_RestoreFramePosition()
     local p = PIHelperDB and PIHelperDB.framePos
     if not p then return end
     f:ClearAllPoints()
-    -- ponytail: assumes relativeTo is always UIParent (true for this frame,
-    -- which is never anchored to anything else). If that changes, save/restore
-    -- relativeTo too instead of hardcoding UIParent here.
+    -- Assumes relativeTo is always UIParent (true for this frame).
+    -- If that changes, save/restore relativeTo too.
     f:SetPoint(p.point, UIParent, p.relPoint, p.x, p.y)
 end
 
@@ -86,10 +83,20 @@ trinketHeader:SetPoint("TOPLEFT", setTargetBtn, "BOTTOMLEFT", 0, -12)
 trinketHeader:SetText("On-Use Trinkets:")
 trinketHeader:SetTextColor(1, 0.82, 0)
 
+-- Manual rescan — trinkets are sometimes not yet cached right after login.
+local scanTrinketsBtn = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
+scanTrinketsBtn:SetSize(56, 20)
+scanTrinketsBtn:SetPoint("LEFT", trinketHeader, "RIGHT", 8, 0)
+scanTrinketsBtn:SetText("Scan")
+scanTrinketsBtn:SetScript("OnClick", function()
+    PIHelper_ScanTrinkets()
+end)
+
 local cursorY = 0 -- offset (negative) from trinketHeader:BOTTOMLEFT for the next section
 
+-- PIHelper_TRINKET_SLOTS is defined in PIHelper.lua (loads first per toc order).
 local trinketRows = {}
-for i, slot in ipairs(TRINKET_SLOTS) do
+for i, slot in ipairs(PIHelper_TRINKET_SLOTS) do
     local cb = CreateFrame("CheckButton", nil, f, "UICheckButtonTemplate")
     cb:SetPoint("TOPLEFT", trinketHeader, "BOTTOMLEFT", -2, cursorY - ((i - 1) * TRINKET_ROW_H) - 4)
     cb:SetSize(24, 24)
@@ -107,7 +114,7 @@ for i, slot in ipairs(TRINKET_SLOTS) do
 
     trinketRows[slot] = { check = cb, label = lbl }
 end
-cursorY = cursorY - (#TRINKET_SLOTS * TRINKET_ROW_H) - SECTION_GAP
+cursorY = cursorY - (#PIHelper_TRINKET_SLOTS * TRINKET_ROW_H) - SECTION_GAP
 
 local noTrinketLabel = f:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
 noTrinketLabel:SetPoint("TOPLEFT", trinketHeader, "BOTTOMLEFT", 4, -8)
@@ -169,8 +176,14 @@ end
 potionCheck:SetScript("OnClick", function(self)
     PIHelperDB.usePotion = self:GetChecked()
     SetPotionRadiosShown(PIHelperDB.usePotion)
+    -- Only default to the first option when truly no potion has ever been chosen.
+    -- Do NOT auto-select when disabling then re-enabling — that would silently
+    -- overwrite a previously saved selection with POTION_OPTIONS[1].
     if PIHelperDB.usePotion and PIHelperDB.potionName == "" then
         PIHelperDB.potionName = POTION_OPTIONS[1]
+        for _, r in ipairs(potionRadios) do
+            r.button:SetChecked(r.button.potionName == PIHelperDB.potionName)
+        end
     end
     PIHelper_UpdateMacro()
 end)
@@ -223,7 +236,7 @@ function PIHelper_RefreshGUI()
 
     -- Trinket rows
     local anyFound = false
-    for _, slot in ipairs(TRINKET_SLOTS) do
+    for _, slot in ipairs(PIHelper_TRINKET_SLOTS) do
         local row = trinketRows[slot]
         local t   = PIHelper_Trinkets[slot]
         if t then
@@ -249,22 +262,6 @@ function PIHelper_RefreshGUI()
     -- Vampiric Embrace
     vampiricEmbraceCheck:SetChecked(db.useVampiricEmbrace)
 
-    -- Macro preview
-    local lines = {}
-    for _, slot in ipairs(TRINKET_SLOTS) do
-        local t = PIHelper_Trinkets[slot]
-        if t and db.trinketEnabled[t.itemID] ~= false then
-            lines[#lines + 1] = "/use " .. slot
-        end
-    end
-    if db.usePotion and db.potionName ~= "" then
-        lines[#lines + 1] = "/use Fleeting " .. db.potionName
-        lines[#lines + 1] = "/use " .. db.potionName
-    end
-    if db.useVampiricEmbrace then
-        lines[#lines + 1] = "/cast Vampiric Embrace"
-    end
-    local clause = (db.target ~= "") and ("[@" .. db.target .. ",exists,nodead]") or ""
-    lines[#lines + 1] = "/cast [@mouseover,help,nodead]" .. clause .. "[] Power Infusion"
-    previewText:SetText(table.concat(lines, "\n"))
+    -- Macro preview — single source of truth via PIHelper_BuildMacroBody()
+    previewText:SetText(PIHelper_BuildMacroBody())
 end

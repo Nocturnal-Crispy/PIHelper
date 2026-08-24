@@ -4,7 +4,9 @@
 local ADDON_NAME    = "PIHelper"
 local MACRO_NAME    = "PI"
 local MACRO_ICON    = "INV_MISC_QUESTIONMARK"
-local TRINKET_SLOTS = { 13, 14 }
+
+-- Shared with PITarget.lua via global (single definition, no manual sync)
+PIHelper_TRINKET_SLOTS = { 13, 14 }
 
 -- Item APIs moved into the C_Item namespace; the bare globals were removed in 12.0.
 -- Fall back to the old globals so the addon still works on pre-12.0 clients.
@@ -15,62 +17,99 @@ local GetItemInfo  = (C_Item and C_Item.GetItemInfo)  or GetItemInfo
 PIHelper_Trinkets = {}
 
 local pendingMacroUpdate = false
-local pendingItemIDs    = {}
 local frame  -- forward declaration; assigned below before any events fire
 
 local DEFAULTS = {
-    target           = "",
-    trinketEnabled   = {},
-    usePotion        = false,
-    potionName       = "",
+    target             = "",
+    trinketEnabled     = {},
+    usePotion          = false,
+    potionName         = "",
     useVampiricEmbrace = false,
 }
 
+-- ─── Helpers ──────────────────────────────────────────────────────────────────
+
+-- Refresh the GUI only when it is open; avoids nil-checks scattered everywhere.
+local function RefreshGUIIfVisible()
+    if PIHelperFrame and PIHelperFrame:IsShown() and PIHelper_RefreshGUI then
+        PIHelper_RefreshGUI()
+    end
+end
+
+-- Full rescan + macro rebuild + optional GUI refresh in one call.
+local function RescanAndUpdate()
+    ScanTrinkets()
+    PIHelper_UpdateMacro()
+    RefreshGUIIfVisible()
+end
+
 -- ─── Trinket Scanning ─────────────────────────────────────────────────────────
 
-local function ScanTrinkets()
+function ScanTrinkets()
     local found = {}
-    pendingItemIDs = {}
-    for _, slot in ipairs(TRINKET_SLOTS) do
+    for _, slot in ipairs(PIHelper_TRINKET_SLOTS) do
         local itemID = GetInventoryItemID("player", slot)
         if itemID then
-            local spellName = GetItemSpell(itemID)
-            if spellName then
+            -- pcall isolates per slot: one bad item can't blank the entire scan.
+            local ok, spellName = pcall(GetItemSpell, itemID)
+            if not ok then
+                print("|cffff4444PIHelper:|r trinket scan error on item " .. itemID .. ": " .. tostring(spellName))
+            elseif spellName then
                 local itemName = GetItemInfo(itemID) or ("Item #" .. itemID)
                 found[slot] = { itemID = itemID, name = itemName }
-            else
-                -- Item data not in cache yet; request it so GET_ITEM_INFO_RECEIVED fires
-                GetItemInfo(itemID)
-                pendingItemIDs[itemID] = true
+            elseif not C_Item.IsItemDataCachedByID(itemID) then
+                -- Item data not cached yet; retry once the server sends it.
+                -- ContinueOnItemLoad also fires immediately if data arrives first,
+                -- so there is no stuck-pending race condition.
+                Item:CreateFromItemID(itemID):ContinueOnItemLoad(function()
+                    RescanAndUpdate()
+                end)
             end
+            -- else: cached, no use-spell — not an on-use trinket, nothing to retry.
         end
     end
     PIHelper_Trinkets = found
+end
 
-    -- Keep GET_ITEM_INFO_RECEIVED registered iff we have pending items
-    if next(pendingItemIDs) then
-        frame:RegisterEvent("GET_ITEM_INFO_RECEIVED")
-    else
-        frame:UnregisterEvent("GET_ITEM_INFO_RECEIVED")
+-- Exposed for the GUI's "Scan" button.
+function PIHelper_ScanTrinkets()
+    local count = 0
+    RescanAndUpdate()
+    for _ in pairs(PIHelper_Trinkets) do count = count + 1 end
+    print("|cff00ccffPIHelper:|r Trinket scan complete — |cffffd700" .. count .. "|r on-use trinket(s) found.")
+end
+
+-- ─── Potion Resolution ────────────────────────────────────────────────────────
+
+-- Returns "Fleeting <name>" when the player has that item in their bags,
+-- otherwise returns the base name. Single /use line in the macro covers both cases.
+local function ResolvePotionName(baseName)
+    local fleetingName = "Fleeting " .. baseName
+    if (GetItemCount(fleetingName) or 0) > 0 then
+        return fleetingName
     end
+    return baseName
 end
 
 -- ─── Macro Builder ────────────────────────────────────────────────────────────
 
-local function BuildMacroBody()
+-- Exported so PITarget.lua can use it for the live preview — single source of truth.
+function PIHelper_BuildMacroBody()
     local db    = PIHelperDB
     local lines = {}
 
-    for _, slot in ipairs(TRINKET_SLOTS) do
+    -- Potion first: WoW only allows one item use per macro click. Putting the
+    -- potion before trinkets ensures it fires when available (typically the
+    -- opener). Trinkets fire on subsequent presses once the potion is on CD.
+    if db.usePotion and db.potionName ~= "" then
+        lines[#lines + 1] = "/use " .. ResolvePotionName(db.potionName)
+    end
+
+    for _, slot in ipairs(PIHelper_TRINKET_SLOTS) do
         local t = PIHelper_Trinkets[slot]
         if t and db.trinketEnabled[t.itemID] ~= false then
             lines[#lines + 1] = "/use " .. slot
         end
-    end
-
-    if db.usePotion and db.potionName ~= "" then
-        lines[#lines + 1] = "/use Fleeting " .. db.potionName
-        lines[#lines + 1] = "/use " .. db.potionName
     end
 
     if db.useVampiricEmbrace then
@@ -95,10 +134,13 @@ function PIHelper_UpdateMacro()
     end
 
     pendingMacroUpdate = false
-    local body = BuildMacroBody()
+    local body = PIHelper_BuildMacroBody()
     local idx  = GetMacroIndexByName(MACRO_NAME)
 
     if idx > 0 then
+        -- Skip the write when nothing changed to avoid unnecessary SavedVariables churn
+        -- (BAG_UPDATE fires frequently; most ticks the body is identical).
+        if GetMacroBody(idx) == body then return end
         EditMacro(idx, MACRO_NAME, nil, body)
     else
         local newIdx = CreateMacro(MACRO_NAME, MACRO_ICON, body)
@@ -109,9 +151,7 @@ function PIHelper_UpdateMacro()
         end
     end
 
-    if PIHelperFrame and PIHelperFrame:IsShown() and PIHelper_RefreshGUI then
-        PIHelper_RefreshGUI()
-    end
+    RefreshGUIIfVisible()
 end
 
 -- ─── Event Handler ────────────────────────────────────────────────────────────
@@ -121,55 +161,65 @@ frame:RegisterEvent("ADDON_LOADED")
 frame:RegisterEvent("PLAYER_LOGIN")
 frame:RegisterEvent("PLAYER_REGEN_ENABLED")
 frame:RegisterEvent("PLAYER_EQUIPMENT_CHANGED")
--- GET_ITEM_INFO_RECEIVED is registered/unregistered dynamically by ScanTrinkets()
+frame:RegisterEvent("BAG_UPDATE")
 
-frame:SetScript("OnEvent", function(_, event, arg1)
-    if event == "ADDON_LOADED" then
+local eventHandlers = {
+    ADDON_LOADED = function(arg1)
         if arg1 ~= ADDON_NAME then return end
 
         if type(PIHelperDB) ~= "table" then PIHelperDB = {} end
+
+        -- Deep-copy scalar defaults; always assign a fresh table for trinketEnabled
+        -- so DEFAULTS never shares a reference with PIHelperDB (mutations would
+        -- otherwise corrupt the defaults for any subsequent DB rebuild).
         for k, v in pairs(DEFAULTS) do
-            if PIHelperDB[k] == nil then PIHelperDB[k] = v end
+            if PIHelperDB[k] == nil then
+                PIHelperDB[k] = (type(v) == "table") and {} or v
+            end
         end
         if type(PIHelperDB.trinketEnabled) ~= "table" then
             PIHelperDB.trinketEnabled = {}
+        end
+
+        -- Guard: usePotion=true with no potionName (e.g. crash prevented SavedVariables
+        -- write) would silently produce no potion line in the macro.
+        if PIHelperDB.usePotion and PIHelperDB.potionName == "" then
+            PIHelperDB.usePotion = false
         end
 
         if PIHelper_RestoreFramePosition then PIHelper_RestoreFramePosition() end
 
         ScanTrinkets()
         PIHelper_UpdateMacro()
+    end,
 
-    elseif event == "PLAYER_LOGIN" then
-        -- Item data is more likely cached by login; retry scan in case ADDON_LOADED was too early
-        ScanTrinkets()
-        PIHelper_UpdateMacro()
+    PLAYER_LOGIN = function()
+        -- Item data is more likely cached by login; retry scan in case ADDON_LOADED was too early.
+        RescanAndUpdate()
+    end,
 
-    elseif event == "PLAYER_REGEN_ENABLED" then
+    PLAYER_REGEN_ENABLED = function()
         if pendingMacroUpdate then
             PIHelper_UpdateMacro()
         end
+    end,
 
-    elseif event == "PLAYER_EQUIPMENT_CHANGED" then
+    PLAYER_EQUIPMENT_CHANGED = function(arg1)
         if arg1 == 13 or arg1 == 14 then
-            ScanTrinkets()
-            PIHelper_UpdateMacro()
-            if PIHelperFrame and PIHelperFrame:IsShown() and PIHelper_RefreshGUI then
-                PIHelper_RefreshGUI()
-            end
+            RescanAndUpdate()
         end
+    end,
 
-    elseif event == "GET_ITEM_INFO_RECEIVED" then
-        -- arg1 is itemID (number)
-        if pendingItemIDs[arg1] then
-            -- Re-scan now that this item's data is available; ScanTrinkets manages (un)registration
-            ScanTrinkets()
-            PIHelper_UpdateMacro()
-            if PIHelperFrame and PIHelperFrame:IsShown() and PIHelper_RefreshGUI then
-                PIHelper_RefreshGUI()
-            end
-        end
-    end
+    BAG_UPDATE = function()
+        -- Re-resolve Fleeting vs. regular potion whenever bags change.
+        -- Skip-identical check in PIHelper_UpdateMacro keeps this free when nothing changed.
+        PIHelper_UpdateMacro()
+    end,
+}
+
+frame:SetScript("OnEvent", function(_, event, arg1)
+    local handler = eventHandlers[event]
+    if handler then handler(arg1) end
 end)
 
 -- ─── Slash Commands ───────────────────────────────────────────────────────────
@@ -198,11 +248,17 @@ local function PrintStatus()
     local tCount = 0
     for _ in pairs(PIHelper_Trinkets) do tCount = tCount + 1 end
     print(p .. "On-use trinkets found: |cffffd700" .. tCount .. "|r")
+
+    if dbOk and PIHelperDB.usePotion and PIHelperDB.potionName ~= "" then
+        local resolved = ResolvePotionName(PIHelperDB.potionName)
+        print(p .. "Potion: |cffffd700" .. resolved .. "|r" ..
+              (resolved ~= PIHelperDB.potionName and " |cff00ff00(Fleeting in bags)|r" or " |cffaaaaaa(regular — no Fleeting in bags)|r"))
+    end
 end
 
 -- Shared by the /pih slash command and the GUI's "Set from Target" button.
--- Uses GetUnitName(unit, true) rather than UnitName() so cross-realm targets
--- (M+/pug raids) are stored as "Name-Realm" and still resolve in the macro.
+-- Uses GetUnitName(unit, true) so cross-realm targets (M+/pug raids) are stored
+-- as "Name-Realm" and still resolve in the macro.
 function PIHelper_SetTargetFromUnit()
     if not (UnitExists("target") and UnitIsPlayer("target")) then
         print("|cffff4444PIHelper:|r No valid target.")
@@ -214,9 +270,7 @@ function PIHelper_SetTargetFromUnit()
     PIHelper_UpdateMacro()
     print("|cff00ccffPIHelper:|r PI target set to |cffffd700" .. name .. "|r")
 
-    if PIHelperFrame and PIHelperFrame:IsShown() and PIHelper_RefreshGUI then
-        PIHelper_RefreshGUI()
-    end
+    RefreshGUIIfVisible()
     return true
 end
 
