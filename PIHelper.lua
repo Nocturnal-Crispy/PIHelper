@@ -19,6 +19,13 @@ PIHelper_Trinkets = {}
 local pendingMacroUpdate = false
 local frame  -- forward declaration; assigned below before any events fire
 
+-- ponytail: bounds GET_ITEM_INFO_RECEIVED/SPELL_DATA_LOAD_RESULT retries (see below) —
+-- an emptiness check alone would stop retrying after the first trinket resolves, missing
+-- a second slot still stuck behind slow spell-data caching. Raise this if login is still
+-- flaky after ~20 global item/spell loads; a per-slot "is this one still unresolved" check
+-- would be more precise but can't reliably tell "no on-use effect" from "not cached yet".
+local trinketRetriesLeft = 20
+
 local DEFAULTS = {
     target             = "",
     trinketEnabled     = {},
@@ -164,6 +171,9 @@ end
 frame = CreateFrame("Frame")
 frame:RegisterEvent("ADDON_LOADED")
 frame:RegisterEvent("PLAYER_LOGIN")
+frame:RegisterEvent("PLAYER_ENTERING_WORLD")
+frame:RegisterEvent("GET_ITEM_INFO_RECEIVED")
+frame:RegisterEvent("SPELL_DATA_LOAD_RESULT")
 frame:RegisterEvent("PLAYER_REGEN_ENABLED")
 frame:RegisterEvent("PLAYER_EQUIPMENT_CHANGED")
 frame:RegisterEvent("BAG_UPDATE")
@@ -203,6 +213,34 @@ local eventHandlers = {
         RescanAndUpdate()
     end,
 
+    PLAYER_ENTERING_WORLD = function()
+        -- GetInventoryItemID can still return nil for both ADDON_LOADED and PLAYER_LOGIN
+        -- if equipment data hasn't synced yet; this fires once world/inventory state is ready.
+        RescanAndUpdate()
+    end,
+
+    -- Item data and spell data are cached by two independent async systems.
+    -- IsItemDataCachedByID/ContinueOnItemLoad only cover the item side, so a
+    -- trinket can be found with a cached item record but GetItemSpell still
+    -- nil because the spell side hasn't arrived — a silent false negative
+    -- with no retry. These two events catch each half of that wait; both
+    -- fire often for unrelated items/spells elsewhere in the UI, so retries
+    -- are bounded by trinketRetriesLeft rather than "stop once one is found"
+    -- (a second trinket can still be stuck behind slow spell-data caching).
+    GET_ITEM_INFO_RECEIVED = function(_, success)
+        if success and trinketRetriesLeft > 0 then
+            trinketRetriesLeft = trinketRetriesLeft - 1
+            RescanAndUpdate()
+        end
+    end,
+
+    SPELL_DATA_LOAD_RESULT = function(_, success)
+        if success and trinketRetriesLeft > 0 then
+            trinketRetriesLeft = trinketRetriesLeft - 1
+            RescanAndUpdate()
+        end
+    end,
+
     PLAYER_REGEN_ENABLED = function()
         if pendingMacroUpdate then
             PIHelper_UpdateMacro()
@@ -222,9 +260,9 @@ local eventHandlers = {
     end,
 }
 
-frame:SetScript("OnEvent", function(_, event, arg1)
+frame:SetScript("OnEvent", function(_, event, arg1, arg2)
     local handler = eventHandlers[event]
-    if handler then handler(arg1) end
+    if handler then handler(arg1, arg2) end
 end)
 
 -- ─── Slash Commands ───────────────────────────────────────────────────────────
