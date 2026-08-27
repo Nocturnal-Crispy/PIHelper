@@ -50,22 +50,27 @@ function ScanTrinkets()
     for _, slot in ipairs(PIHelper_TRINKET_SLOTS) do
         local itemID = GetInventoryItemID("player", slot)
         if itemID then
-            -- pcall isolates per slot: one bad item can't blank the entire scan.
-            local ok, spellName = pcall(GetItemSpell, itemID)
-            if not ok then
-                print("|cffff4444PIHelper:|r trinket scan error on item " .. itemID .. ": " .. tostring(spellName))
-            elseif spellName then
-                local itemName = GetItemInfo(itemID) or ("Item #" .. itemID)
-                found[slot] = { itemID = itemID, name = itemName }
-            elseif not C_Item.IsItemDataCachedByID(itemID) then
-                -- Item data not cached yet; retry once the server sends it.
+            if not C_Item.IsItemDataCachedByID(itemID) then
+                -- Item data not cached yet (the common case right after login).
+                -- GetItemSpell throws on uncached items rather than returning nil,
+                -- so it must not be called until the cache is confirmed populated.
                 -- ContinueOnItemLoad also fires immediately if data arrives first,
                 -- so there is no stuck-pending race condition.
                 Item:CreateFromItemID(itemID):ContinueOnItemLoad(function()
                     RescanAndUpdate()
                 end)
+            else
+                -- pcall isolates per slot: one bad item can't blank the entire scan.
+                -- Data is cached here, so a pcall failure is a real bug, not a race.
+                local ok, spellName = pcall(GetItemSpell, itemID)
+                if not ok then
+                    print("|cffff4444PIHelper:|r trinket scan error on item " .. itemID .. ": " .. tostring(spellName))
+                elseif spellName then
+                    local itemName = GetItemInfo(itemID) or ("Item #" .. itemID)
+                    found[slot] = { itemID = itemID, name = itemName }
+                end
+                -- else: cached, no use-spell — not an on-use trinket.
             end
-            -- else: cached, no use-spell — not an on-use trinket, nothing to retry.
         end
     end
     PIHelper_Trinkets = found
