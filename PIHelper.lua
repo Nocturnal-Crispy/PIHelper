@@ -63,11 +63,25 @@ function ScanTrinkets()
         local itemID = GetInventoryItemID("player", slot)
         if itemID then
             if not C_Item.IsItemDataCachedByID(itemID) then
-                -- Item data not cached yet (the common case right after login).
-                -- GetItemSpell throws on uncached items rather than returning nil,
-                -- so it must not be called until the cache is confirmed populated.
-                -- ContinueOnItemLoad also fires immediately if data arrives first,
-                -- so there is no stuck-pending race condition.
+                -- Item data not cached yet. Common right after login, but also
+                -- right after any loading screen (e.g. zoning into a Mythic+
+                -- dungeon) when the cache is briefly cold for an already-equipped
+                -- trinket. GetItemSpell throws on uncached items rather than
+                -- returning nil, so it must not be called until the cache is
+                -- confirmed populated. ContinueOnItemLoad also fires immediately
+                -- if data arrives first, so there is no stuck-pending race.
+                --
+                -- Preserve a previously-detected on-use trinket for this slot
+                -- while its data reloads, as long as the same item is still
+                -- equipped. Without this the scan would blank PIHelper_Trinkets
+                -- and PIHelper_UpdateMacro would immediately drop the /use line
+                -- from the macro — the trinket "disappearing" on entering M+ —
+                -- until the async load below lands (and longer still if a combat
+                -- pull defers the macro rebuild in the meantime).
+                local prev = PIHelper_Trinkets[slot]
+                if prev and prev.itemID == itemID then
+                    found[slot] = prev
+                end
                 Item:CreateFromItemID(itemID):ContinueOnItemLoad(function()
                     RescanAndUpdate()
                 end)
@@ -91,6 +105,17 @@ function ScanTrinkets()
                     found[slot] = { itemID = itemID, name = itemName }
                 end
                 -- else: cached, no on-use spell — not an on-use trinket.
+            end
+        else
+            -- GetInventoryItemID returned nil. Right after a loading screen
+            -- (zoning into a raid or M+) this is often a transient read before
+            -- inventory has synced, not a genuinely empty slot. Preserve any
+            -- previously-detected trinket so the macro keeps its /use line while
+            -- the read settles. A real unequip is safe: PLAYER_EQUIPMENT_CHANGED
+            -- drops the slot before rescanning, so prev is nil and nothing lingers.
+            local prev = PIHelper_Trinkets[slot]
+            if prev then
+                found[slot] = prev
             end
         end
     end
@@ -254,6 +279,11 @@ local eventHandlers = {
 
     PLAYER_EQUIPMENT_CHANGED = function(arg1)
         if arg1 == 13 or arg1 == 14 then
+            -- Drop the old entry for this slot first: on a swap or unequip the
+            -- new item may be uncached (or the slot now empty), and ScanTrinkets'
+            -- transient-nil/uncached preservation would otherwise keep the stale
+            -- trinket. The rescan re-adds it if an on-use trinket is still there.
+            PIHelper_Trinkets[arg1] = nil
             RescanAndUpdate()
         end
     end,
