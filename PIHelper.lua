@@ -19,13 +19,6 @@ PIHelper_Trinkets = {}
 local pendingMacroUpdate = false
 local frame  -- forward declaration; assigned below before any events fire
 
--- ponytail: bounds GET_ITEM_INFO_RECEIVED/SPELL_DATA_LOAD_RESULT retries (see below) —
--- an emptiness check alone would stop retrying after the first trinket resolves, missing
--- a second slot still stuck behind slow spell-data caching. Raise this if login is still
--- flaky after ~20 global item/spell loads; a per-slot "is this one still unresolved" check
--- would be more precise but can't reliably tell "no on-use effect" from "not cached yet".
-local trinketRetriesLeft = 20
-
 local DEFAULTS = {
     target             = "",
     trinketEnabled     = {},
@@ -50,6 +43,18 @@ local function RescanAndUpdate()
     RefreshGUIIfVisible()
 end
 
+-- True when itemID is currently equipped in a trinket slot. Lets the async
+-- item-load event rescan only for our two trinkets and ignore the flood of
+-- unrelated item loads that fire for the whole UI during a cold login.
+local function IsEquippedTrinket(itemID)
+    for _, slot in ipairs(PIHelper_TRINKET_SLOTS) do
+        if GetInventoryItemID("player", slot) == itemID then
+            return true
+        end
+    end
+    return false
+end
+
 -- ─── Trinket Scanning ─────────────────────────────────────────────────────────
 
 function ScanTrinkets()
@@ -69,14 +74,23 @@ function ScanTrinkets()
             else
                 -- pcall isolates per slot: one bad item can't blank the entire scan.
                 -- Data is cached here, so a pcall failure is a real bug, not a race.
-                local ok, spellName = pcall(GetItemSpell, itemID)
+                --
+                -- Key detection off the spell *ID*, not the spell *name*. Item data
+                -- and spell data live in two independent caches; once item data is
+                -- cached GetItemSpell reliably returns the on-use spellID, but the
+                -- spellName comes from the spell cache, which can still be nil right
+                -- after a cold login. Testing spellName here was the login false
+                -- negative (item present, no error, name nil -> silently "no on-use").
+                -- The macro uses the slot number and the item name, so the spell name
+                -- itself is never needed.
+                local ok, spellName, spellID = pcall(GetItemSpell, itemID)
                 if not ok then
                     print("|cffff4444PIHelper:|r trinket scan error on item " .. itemID .. ": " .. tostring(spellName))
-                elseif spellName then
+                elseif spellID then
                     local itemName = GetItemInfo(itemID) or ("Item #" .. itemID)
                     found[slot] = { itemID = itemID, name = itemName }
                 end
-                -- else: cached, no use-spell — not an on-use trinket.
+                -- else: cached, no on-use spell — not an on-use trinket.
             end
         end
     end
@@ -173,7 +187,6 @@ frame:RegisterEvent("ADDON_LOADED")
 frame:RegisterEvent("PLAYER_LOGIN")
 frame:RegisterEvent("PLAYER_ENTERING_WORLD")
 frame:RegisterEvent("GET_ITEM_INFO_RECEIVED")
-frame:RegisterEvent("SPELL_DATA_LOAD_RESULT")
 frame:RegisterEvent("PLAYER_REGEN_ENABLED")
 frame:RegisterEvent("PLAYER_EQUIPMENT_CHANGED")
 frame:RegisterEvent("BAG_UPDATE")
@@ -219,24 +232,16 @@ local eventHandlers = {
         RescanAndUpdate()
     end,
 
-    -- Item data and spell data are cached by two independent async systems.
-    -- IsItemDataCachedByID/ContinueOnItemLoad only cover the item side, so a
-    -- trinket can be found with a cached item record but GetItemSpell still
-    -- nil because the spell side hasn't arrived — a silent false negative
-    -- with no retry. These two events catch each half of that wait; both
-    -- fire often for unrelated items/spells elsewhere in the UI, so retries
-    -- are bounded by trinketRetriesLeft rather than "stop once one is found"
-    -- (a second trinket can still be stuck behind slow spell-data caching).
-    GET_ITEM_INFO_RECEIVED = function(_, success)
-        if success and trinketRetriesLeft > 0 then
-            trinketRetriesLeft = trinketRetriesLeft - 1
-            RescanAndUpdate()
-        end
-    end,
-
-    SPELL_DATA_LOAD_RESULT = function(_, success)
-        if success and trinketRetriesLeft > 0 then
-            trinketRetriesLeft = trinketRetriesLeft - 1
+    -- Safety net alongside ScanTrinkets's own ContinueOnItemLoad: this fires
+    -- when the server delivers item data the scan was waiting on, and covers
+    -- the documented case where ContinueOnItemLoad's callback can silently
+    -- never fire. Filtered to our own trinket itemIDs so the login-time flood
+    -- of unrelated item loads (whole UI) can't trigger needless rescans, and
+    -- so no bounded retry counter is needed. Detection keys off the on-use
+    -- spellID (see ScanTrinkets), which is ready once item data is cached, so
+    -- the separate spell cache is not on the detection path anymore.
+    GET_ITEM_INFO_RECEIVED = function(itemID, success)
+        if success and IsEquippedTrinket(itemID) then
             RescanAndUpdate()
         end
     end,
