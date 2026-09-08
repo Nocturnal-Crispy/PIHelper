@@ -109,3 +109,21 @@ end,
 ```
 
 The `not next(PIHelper_Trinkets)` guard keeps this cheap (both events can fire frequently for unrelated items/spells elsewhere in the UI) by only re-scanning while the addon still has nothing detected — once a scan succeeds, these handlers become no-ops, mirroring the existing "skip unchanged" pattern already used in `PIHelper_UpdateMacro`. This directly targets the confirmed gap: `GET_ITEM_INFO_RECEIVED` catches the item-data-arrives case (a safety net alongside the existing `ContinueOnItemLoad`, since Q2 shows that path can silently never fire), and `SPELL_DATA_LOAD_RESULT` catches the previously-unhandled spell-data-arrives case identified in Q1 — the actual missing half of the wait. Both events are confirmed present and undeprecated in current Mainline (12.1.0) per Warcraft Wiki.
+
+## Addendum (2026-09-08): the two-event / retry approach was superseded
+
+The event-based fix above shipped (the `not next(...)` guard was replaced in commit `c42ae38`/`3378cc0` by a bounded global counter, `trinketRetriesLeft = 20`, precisely because `not next(...)` stops retrying after the *first* of two trinkets resolves and misses the second). **Both variants still failed on a cold login** and the manual Scan button was still needed. Two compounding causes, only one of which the Recommendation above addressed:
+
+1. **The retry counter starves.** `GET_ITEM_INFO_RECEIVED` and `SPELL_DATA_LOAD_RESULT` fire *hundreds* of times during a cold login for the entire UI (action bars, bags, auras). Sharing one global `trinketRetriesLeft` budget, decremented on every unrelated load, exhausts it long before the late-streaming equipment's own item/spell data arrives (§3: equipment is not synchronized to `PLAYER_ENTERING_WORLD` on a full login). By the time the trinket's own event fires, the budget is `0` and the handler is a no-op. The manual scan never touches the counter — which is exactly why it always worked.
+
+2. **Detection was keyed on the spell *name*, but never needed the spell cache at all.** This is the deeper miss. `GetItemSpell` returns `spellName, spellID`. `ScanTrinkets` tested `spellName`, which comes from the spell cache (§1) and lags after login. But the addon never *uses* the spell name — the macro emits the slot number (`/use 13`) and the display uses the *item* name from `GetItemInfo`. The `spellID` is sufficient for "is this an on-use trinket", and it resolves as soon as *item* data is cached. So the entire second async cache (`SPELL_DATA_LOAD_RESULT`, `ContinueOnSpellLoad`) is off the detection path — the Recommendation above added a wait for data that was never required.
+
+Follow-up research into how mature addons solve this (Blizzard's `AsyncCallbackSystem.lua`, WeakAuras' `Private.GetSetId`) confirmed the principle: **key the pending wait by the specific itemID/spellID and filter the global load events by it** — never a global retry counter, which races and tells you nothing about *your* item.
+
+**Shipped fix (v1.0.16, commit `35c8c73`):**
+
+- `ScanTrinkets` keys detection off `spellID` (the second return of `GetItemSpell`), not `spellName`. Ready once item data is cached; no spell-cache dependency.
+- Removed `trinketRetriesLeft` and the `SPELL_DATA_LOAD_RESULT` handler entirely.
+- `GET_ITEM_INFO_RECEIVED` is filtered by itemID (new `IsEquippedTrinket` helper) so only our two trinkets trigger a rescan — unstarvable, no counter, and retained purely as a safety net for the documented case (Q2) where `ContinueOnItemLoad`'s callback never fires.
+
+The existing `ContinueOnItemLoad` path (for the genuinely-uncached-item case) is unchanged and still does the primary work.
