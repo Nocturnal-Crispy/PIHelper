@@ -9,9 +9,12 @@ local MACRO_ICON    = "INV_MISC_QUESTIONMARK"
 PIHelper_TRINKET_SLOTS = { 13, 14 }
 
 -- Item APIs moved into the C_Item namespace; the bare globals were removed in 12.0.
--- Fall back to the old globals so the addon still works on pre-12.0 clients.
+-- GetItemCount's deprecation fallback was removed in 12.1.5, so it needs the
+-- same treatment. Fall back to the old globals so the addon still works on
+-- pre-12.0 (or pre-12.1.5, for GetItemCount) clients.
 local GetItemSpell = (C_Item and C_Item.GetItemSpell) or GetItemSpell
 local GetItemInfo  = (C_Item and C_Item.GetItemInfo)  or GetItemInfo
+local GetItemCount = (C_Item and C_Item.GetItemCount) or GetItemCount
 
 -- Shared with PITarget.lua via global
 PIHelper_Trinkets = {}
