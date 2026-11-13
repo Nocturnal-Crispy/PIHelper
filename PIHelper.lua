@@ -1,6 +1,8 @@
 -- PIHelper.lua
 -- Core: events, trinket scanning, macro building, slash command
 
+local _, ns = ...
+
 local ADDON_NAME    = "PIHelper"
 local MACRO_NAME    = "PI"
 local MACRO_ICON    = "INV_MISC_QUESTIONMARK"
@@ -335,6 +337,8 @@ local function PrintStatus()
         print(p .. "Potion: |cffffd700" .. resolved .. "|r" ..
               (resolved ~= PIHelperDB.potionName and " |cff00ff00(Fleeting in bags)|r" or " |cffaaaaaa(regular — no Fleeting in bags)|r"))
     end
+
+    if ns.CD then print(p .. ns.CD.GetStatusLine()) end
 end
 
 -- Shared by the /pih slash command and the GUI's "Set from Target" button.
@@ -362,6 +366,13 @@ SlashCmdList["PIH"] = function(msg)
 
     if cmd == "status" then
         PrintStatus()
+        return
+    end
+
+    -- "/pih cd ..." goes to the CD tracker before the target check, so it
+    -- never changes the PI target.
+    if cmd == "cd" then
+        if ns.CD then ns.CD.HandleSlash(msg:match("^%s*%S+%s*(.-)%s*$") or "") end
         return
     end
 

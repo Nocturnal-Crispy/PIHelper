@@ -16,3 +16,16 @@ UIWidgets.lua
 UIWidgetsMenu.lua
 UIWindow.lua
 PITarget.lua
+CDTrackerData.lua
+CDTrackerCore.lua
+CDTrackerSerialize.lua
+CDTrackerMedia.lua
+CDTrackerFrames.lua
+CDTrackerGlow.lua
+CDTrackerAlert.lua
+CDTracker.lua
+CDTrackerSettings.lua
+CDTrackerSlash.lua
+CDOptionsTracking.lua
+CDOptionsDisplay.lua
+CDTrackerMinimap.lua
