@@ -248,7 +248,13 @@ local function BuildChrome()
     T.EnsureScaleWatcher()
     T.Shadow(f)
     T.Solid(f, "BACKGROUND", "bg", T.alpha.window):SetAllPoints()
-    chrome.border = T.Border(f, "line")
+    -- The border sits on a click-through overlay above the opaque sidebar and
+    -- pane children, so all four edges stay visible.
+    local edge = CreateFrame("Frame", nil, f)
+    edge:SetAllPoints(f)
+    edge:SetFrameLevel(f:GetFrameLevel() + M.borderLevel)
+    edge:EnableMouse(false)
+    chrome.border = T.Border(edge, "line")
     chrome.sidebar = BuildSidebar()
 
     local pane = CreateFrame("Frame", nil, f)

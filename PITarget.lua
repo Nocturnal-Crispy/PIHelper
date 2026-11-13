@@ -40,14 +40,21 @@ local function BuildTarget(page, st)
         PIHelper_UpdateMacro()
         if PIHelper_RefreshGUI then PIHelper_RefreshGUI() end
     end })
+    -- The name is part of the row control so the row reserves its width;
+    -- long Name-Realm values truncate inside targetNameW.
     local holder = CreateFrame("Frame", nil, page.content)
-    holder:SetSize(setBtn:GetWidth() + M.gap + clearBtn:GetWidth(), M.buttonH)
+    holder:SetSize(M.targetNameW + 2 * M.gap + setBtn:GetWidth() + M.gap + clearBtn:GetWidth(), M.buttonH)
     setBtn:SetParent(holder); clearBtn:SetParent(holder)
     clearBtn:SetPoint("RIGHT", holder, "RIGHT")
     setBtn:SetPoint("RIGHT", clearBtn, "LEFT", -M.gap, 0)
     page.targetName = W.Text(holder, "label", "fg")
     page.targetName:SetPoint("RIGHT", setBtn, "LEFT", -2 * M.gap, 0)
-    st:Row("PI target", "Target a player and type /pih to change.", holder)
+    page.targetName:SetWidth(M.targetNameW)
+    page.targetName:SetJustifyH("RIGHT")
+    page.targetName:SetWordWrap(false)
+    page.targetName:SetMaxLines(1)
+    st:Row("PI target", nil, holder)
+    st:Note("Target a player and type /pih to change.")
 end
 
 local function TrinketToggle(slot)

@@ -98,7 +98,7 @@ local function BuildAlert(content, page)
         if ns.CDAlert.IsUnlocked() then ns.CDAlert.Lock() else ns.CDAlert.Unlock() end
     end })
     local reset = W.Button(content, { label = "Reset position", onClick = function() ns.CDAlert.ResetPosition() end })
-    st:Row("Move alert", "Drag the alert; it snaps to the screen center within 8 px.", Group(content, { page.lockBtn, reset }))
+    st:Row("Move alert", "Drag to move; snaps to center within 8 px.", Group(content, { page.lockBtn, reset }))
     page.posText = W.Text(content, "label", "muted")
     local posHolder = CreateFrame("Frame", nil, content)
     posHolder:SetSize(140, M.buttonH)

@@ -94,8 +94,8 @@ local function BuildContexts(content, page)
     page.ctx = "raid"
     local st = W.Stack(content)
     page.stack = st
-    st:Row("Context", "Focus watches your focus target and pauses Raid/Dungeon tracking.",
-        W.Segmented(content, { items = CONTEXT_ITEMS, width = 3 * M.buttonW,
+    st:Row("Context", "Focus tracks your focus target and pauses the others.",
+        W.Segmented(content, { items = CONTEXT_ITEMS, width = 3 * M.segW,
             get = function() return page.ctx end,
             set = function(v) page.ctx = v; ns.UI.Refresh() end }))
     st:Section("Settings")
@@ -117,8 +117,8 @@ local function BuildContexts(content, page)
         set = function(r, g, b, a)
             Apply(function(c) c.contexts[page.ctx].glowColor = { r = r, g = g, b = b, a = a or 1 } end)
         end }))
-    st:Row("Duration text", "Show remaining time on the frame, the alert, or both.", W.Segmented(content, {
-        items = DURATION_ITEMS, width = 4 * 64,
+    st:Row("Duration text", "Time left on the frame, alert, or both.", W.Segmented(content, {
+        items = DURATION_ITEMS, width = 4 * M.segW,
         get = CtxGetter(page, "durationText"), set = CtxSetter(page, "durationText") }))
     st:Row("Show alert", "On-screen icon and name for the newest highlight.", CtxToggle(content, page, "showAlert"))
     st:Row("Play sound", "When a highlight starts (at most every 2 seconds).", CtxToggle(content, page, "playSound"))
@@ -207,8 +207,8 @@ local function BuildBuffs(content, page)
     page.spellRows, page.listItems = {}, {}
     local st = W.Stack(content)
     page.stack = st
-    st:Row("Scope", "Shared buffs apply to every context without its own list.", W.Segmented(content, {
-        items = SCOPE_ITEMS, width = 4 * 76,
+    st:Row("Scope", "Contexts without their own list use Shared.", W.Segmented(content, {
+        items = SCOPE_ITEMS, width = 4 * M.segW,
         get = function() return page.scope end,
         set = function(v) page.scope = v; page.customError:SetText(""); ns.UI.Refresh() end }))
     page.ownRow = st:Row("Use separate buffs", "Give this context its own buff list.", Toggle(content,
@@ -274,7 +274,8 @@ local function BuildPlayers(content, page)
     targetBtn:SetPoint("RIGHT", holder, "RIGHT")
     addBtn:SetPoint("RIGHT", targetBtn, "LEFT", -M.gap, 0)
     edit:SetPoint("RIGHT", addBtn, "LEFT", -M.gap, 0)
-    st:Row("Add player", "Name or Name-Realm. Listed players are tracked even as tanks or healers.", holder)
+    st:Row("Add player", nil, holder)
+    st:Note("Name or Name-Realm. Listed players are tracked even as tanks or healers.")
     page.error = st:Note("", "danger")
     page.empty = st:Note("No players listed.")
     page.pool = W.RowPool(st:Container(), PlayerRow)

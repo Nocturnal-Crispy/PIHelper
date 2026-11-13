@@ -48,6 +48,7 @@ local T = {
         tooltipW = 240, tooltipPad = 8, snap = 8,
         buttonPad = 24, pillPad = 8, hitPad = 4, thumbMin = 24, chevronLen = 6,
         modalW = 340, modalH = 110, previewH = 110, multiEditH = 120, gap = 8,
+        controlGap = 16, segW = 64, borderLevel = 50, targetNameW = 140,
     },
 }
 

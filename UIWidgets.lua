@@ -127,10 +127,12 @@ end
 function W.Toggle(parent, opts)
     local pad = M.hitPad
     local tg = CreateFrame("Button", nil, parent)
-    tg:SetSize(M.toggleW + 2 * pad, M.toggleH + 2 * pad)
+    -- Exactly track-sized so it aligns with the control column; the extra
+    -- click area lives in the hit rect instead of the frame size.
+    tg:SetSize(M.toggleW, M.toggleH)
+    tg:SetHitRectInsets(-pad, -pad, -pad, -pad)
     tg.track = tg:CreateTexture(nil, "ARTWORK")
-    tg.track:SetPoint("TOPLEFT", pad, -pad)
-    tg.track:SetPoint("BOTTOMRIGHT", -pad, pad)
+    tg.track:SetAllPoints()
     tg.knob = tg:CreateTexture(nil, "OVERLAY")
     local k = M.toggleH - 2 * M.toggleInset
     tg.knob:SetSize(k, k)
@@ -158,7 +160,7 @@ end
 
 local function PaintEdit(eb)
     local active = eb.hovered or eb:HasFocus()
-    eb.border:SetColor(active and "accent" or "black", 1)
+    eb.border:SetColor(active and "accent" or "line", 1)
 end
 
 -- Styles a raw EditBox (shared by single- and multi-line variants).
@@ -169,7 +171,7 @@ function W.StyleEditBox(eb, sizeKey)
     eb:SetTextInsets(M.editInset, M.editInset, 0, 0)
     eb.bgTex = T.Solid(eb, "BACKGROUND", "bg", 1)
     eb.bgTex:SetAllPoints()
-    eb.border = T.Border(eb, "black")
+    eb.border = T.Border(eb, "line")
     eb:HookScript("OnEnter", function(self) self.hovered = true; PaintEdit(self) end)
     eb:HookScript("OnLeave", function(self) self.hovered = false; PaintEdit(self) end)
     eb:HookScript("OnEditFocusGained", PaintEdit)
@@ -320,7 +322,8 @@ end
 function W.Swatch(parent, opts)
     local sw = CreateFrame("Button", nil, parent)
     sw:SetSize(M.swatchW, M.swatchH)
-    sw.color = sw:CreateTexture(nil, "ARTWORK")
+    -- BACKGROUND so the BORDER-layer edges (idle line / hover accent) draw on top.
+    sw.color = sw:CreateTexture(nil, "BACKGROUND")
     sw.color:SetAllPoints()
     sw.border = T.Border(sw, "line")
     function sw:refresh()
@@ -445,10 +448,9 @@ end
 
 -- --- Rows, sections, layout stack --------------------------------------------
 
+-- Hovering the label/note block shows the full note (it may be truncated).
 local function AttachNoteTooltip(row)
     local hit = CreateFrame("Frame", nil, row)
-    hit:SetPoint("TOPLEFT", row.label, "TOPLEFT")
-    hit:SetPoint("BOTTOMRIGHT", row.label, "BOTTOMRIGHT")
     hit:EnableMouse(true)
     hit:SetScript("OnEnter", function(self)
         if row.noteText and ns.UI then ns.UI.ShowTooltip(self, row.label:GetText(), row.noteText) end
@@ -457,16 +459,46 @@ local function AttachNoteTooltip(row)
     row.hit = hit
 end
 
+local function SingleLine(fs)
+    fs:SetWordWrap(false)
+    fs:SetMaxLines(1)
+    return fs
+end
+
+-- Caps label and note to the space left of the control so long text truncates
+-- instead of running underneath it. Re-run whenever the row or control resizes.
+-- Until the row is laid out its width is unknown; the first OnSizeChanged fixes it.
+local function LayoutRowText(row)
+    local rowW = row:GetWidth() or 0
+    if rowW <= 0 then return end
+    local free = rowW - 2 * M.rowInset
+    if row.control then free = free - (row.control:GetWidth() or 0) - M.controlGap end
+    if free < 1 then free = 1 end
+    row.label:SetWidth(free)
+    row.note:SetWidth(free)
+    local hit = row.hit
+    hit:ClearAllPoints()
+    hit:SetPoint("TOPLEFT", row.label, "TOPLEFT")
+    hit:SetPoint("BOTTOMLEFT", row.note:IsShown() and row.note or row.label, "BOTTOMLEFT")
+    hit:SetWidth(free)
+end
+
+local function OnControlSizeChanged(ctrl)
+    local row = ctrl.ownerRow
+    if row and row.control == ctrl then LayoutRowText(row) end
+end
+
 -- A settings row: label (+ optional note) on the left, control on the right.
 function W.Row(parent, label, note, control)
     local row = CreateFrame("Frame", nil, parent)
     row:SetHeight(M.rowH)
-    row.label = W.Text(row, "label", "fg")
-    row.note = W.Text(row, "note", "muted")
+    row.label = SingleLine(W.Text(row, "label", "fg"))
+    row.note = SingleLine(W.Text(row, "note", "muted"))
     row.note:SetPoint("TOPLEFT", row.label, "BOTTOMLEFT", 0, -M.labelGap)
     local div = T.Hairline(row, "line", T.alpha.rule)
     div:SetPoint("BOTTOMLEFT"); div:SetPoint("BOTTOMRIGHT")
     AttachNoteTooltip(row)
+    row:HookScript("OnSizeChanged", LayoutRowText)
 
     function row:SetLabel(text, noteText)
         self.label:SetText(text or "")
@@ -476,13 +508,17 @@ function W.Row(parent, label, note, control)
         self.label:ClearAllPoints()
         local offset = self.note:IsShown() and (T.size.note + M.labelGap) / 2 or 0
         self.label:SetPoint("LEFT", self, "LEFT", M.rowInset, offset)
+        LayoutRowText(self)
     end
     function row:SetControl(ctrl)
         self.control = ctrl
         if ctrl then
             ctrl:ClearAllPoints()
             ctrl:SetPoint("RIGHT", self, "RIGHT", -M.rowInset, 0)
+            if not ctrl.ownerRow then ctrl:HookScript("OnSizeChanged", OnControlSizeChanged) end
+            ctrl.ownerRow = self
         end
+        LayoutRowText(self)
     end
     function row:SetEnabled(on)
         self:SetAlpha(on and 1 or T.alpha.dim)
