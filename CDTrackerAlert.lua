@@ -70,13 +70,18 @@ function Alert.ApplyFont()
     frame.duration:SetFont(path, cfg.alertFontSize, "OUTLINE")
 end
 
+-- Saved offsets are in UIParent units; SetPoint offsets are in the frame's
+-- own scaled units, so divide by scale to keep the position scale-independent.
 function Alert.ApplyLayout()
     if not frame then return end
     local cfg = Cfg()
     local a = cfg and cfg.alert or DEFAULT_POS
-    frame:SetScale(a.scale or 1)
+    local scale = a.scale or 1
+    frame:SetScale(scale)
     frame:ClearAllPoints()
-    frame:SetPoint(a.point, UIParent, a.relPoint, a.x, a.y)
+    frame:SetPoint(a.point, UIParent, a.relPoint, a.x / scale, a.y / scale)
+    -- The new effective scale changes how wide one physical pixel is.
+    if mover then mover.border:Apply() end
 end
 
 local function NameColor(classFile)
@@ -161,8 +166,8 @@ local function Clamp(v)
     return v
 end
 
--- Converts the dropped frame position into CENTER/CENTER offsets in the
--- alert's own (scaled) units, snaps, rounds, clamps and saves.
+-- Converts the dropped frame position into CENTER/CENTER offsets in UIParent
+-- units (independent of the alert scale), snaps, rounds, clamps and saves.
 local function SaveDrop()
     frame:StopMovingOrSizing()
     if guides then guides:Hide() end
@@ -170,8 +175,8 @@ local function SaveDrop()
     local ux, uy = UIParent:GetCenter()
     if not (fx and ux) then return end
     local ratio = frame:GetEffectiveScale() / UIParent:GetEffectiveScale()
-    local x = (fx * ratio - ux) / ratio
-    local y = (fy * ratio - uy) / ratio
+    local x = fx * ratio - ux
+    local y = fy * ratio - uy
     x, y = Core.SnapOffset(x, y, T.metric.snap)
     x, y = Clamp(x), Clamp(y)
     ns.CD.ApplySettingsChange(function(c)
