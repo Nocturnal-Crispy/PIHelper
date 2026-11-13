@@ -1,8 +1,9 @@
 ## Interface: 120105, 120001, 120000
 ## Title: PIHelper
-## Notes: Save a preferred Power Infusion target and update a PI macro out of combat.
+## Notes: Power Infusion macro helper plus a CD tracker that highlights raid frames when DPS players use major cooldowns.
 ## Author: Crispy
 ## SavedVariables: PIHelperDB
+## OptionalDeps: LibSharedMedia-3.0, SharedMedia, BigWigs, LibCustomGlow-1.0, LibDataBroker-1.1, LibDBIcon-1.0
 ## Version: 1.0.19
 ## X-Website: https://github.com/Nocturnal-Crispy/PIHelper
 ## X-Repository: https://github.com/Nocturnal-Crispy/PIHelper
@@ -10,4 +11,8 @@
 
 
 PIHelper.lua
+UITheme.lua
+UIWidgets.lua
+UIWidgetsMenu.lua
+UIWindow.lua
 PITarget.lua
