@@ -156,6 +156,25 @@ T["reject envelope problems"] = function(t)
     Rejects(t, Wrap("S5:hello"), "Corrupt import string.", "not a table")
 end
 
+-- A long whitespace run must not trigger a quadratic trim (client freeze).
+T["reject long whitespace runs quickly"] = function(t)
+    local spaces = string.rep(" ", 65000)
+    local start = os.clock()
+    Rejects(t, PREFIX .. spaces .. "A", "Corrupt import string.", "internal run")
+    Rejects(t, PREFIX .. "A" .. spaces .. "B", "Corrupt import string.", "run between data")
+    Rejects(t, PREFIX .. "A" .. spaces, "Corrupt import string.", "trailing run")
+    Rejects(t, spaces .. "XYZ1:A", "Not a PIHelper CD tracker string.", "leading run")
+    t.ok(os.clock() - start < 1, "whitespace runs took " .. (os.clock() - start) .. "s")
+end
+
+T["import tolerates long trailing whitespace"] = function(t)
+    local text = S.ExportSettings(Core.DeepCopy(Core.DEFAULTS))
+    local padded = text .. string.rep(" \t\r\n", 10000)
+    local start = os.clock()
+    t.ok(S.ImportSettings(padded, Core.DEFAULTS), "padded import")
+    t.ok(os.clock() - start < 1, "trailing whitespace took " .. (os.clock() - start) .. "s")
+end
+
 T["reject structural limits"] = function(t)
     Rejects(t, Wrap("{S1:vN1;S8:settings" .. assert(S.Encode(Nested(8))) .. "}"),
         "Corrupt import string.", "depth 9")

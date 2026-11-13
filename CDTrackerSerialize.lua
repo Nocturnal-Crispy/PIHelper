@@ -242,7 +242,7 @@ end
 
 local function ParseEnvelope(text)
     if type(text) ~= "string" or #text > MAX_INPUT then return nil, ERR_CORRUPT end
-    text = text:gsub("^%s+", ""):gsub("%s+$", "")
+    text = ns.CDCore.Trim(text)
     if text:sub(1, #PREFIX) ~= PREFIX then return nil, ERR_PREFIX end
     local raw = S.Base64Decode(text:sub(#PREFIX + 1))
     if not raw then return nil, ERR_CORRUPT end

@@ -31,9 +31,19 @@ function Core.IsSecret(v)
     return issecretvalue ~= nil and issecretvalue(v) == true
 end
 
-local function Trim(s)
-    return (s:gsub("^%s+", ""):gsub("%s+$", ""))
+local function IsSpaceByte(b)
+    return b == 32 or (b >= 9 and b <= 13)
 end
+
+-- Linear-time trim. The pattern form gsub("%s+$", "") is quadratic on long
+-- whitespace runs, which a crafted import string could use to freeze the client.
+local function Trim(s)
+    local first = s:match("^%s*()")
+    local last = #s
+    while last >= first and IsSpaceByte(s:byte(last)) do last = last - 1 end
+    return s:sub(first, last)
+end
+Core.Trim = Trim
 
 local function IsNaN(n) return n ~= n end
 
