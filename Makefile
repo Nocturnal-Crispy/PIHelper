@@ -5,7 +5,10 @@ ZIPNAME := $(ADDON)-$(VERSION).zip
 
 WOW_ADDONS := $(HOME)/.steam/steam/steamapps/compatdata/2832488321/pfx/drive_c/Program Files (x86)/World of Warcraft/_retail_/Interface/AddOns
 
-.PHONY: release zip deploy clean
+LUA  ?= lua
+LUAC ?= luac
+
+.PHONY: release zip deploy clean test check
 
 release:
 	@OLD=$$(grep '## Version' $(ADDON).toc | sed 's/.*: //'); \
@@ -39,3 +42,9 @@ deploy:
 
 clean:
 	@rm -rf $(OUTDIR)
+
+test:
+	$(LUA) tests/run.lua
+
+check:
+	$(LUAC) -p *.lua tests/*.lua
