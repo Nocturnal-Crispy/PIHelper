@@ -94,6 +94,9 @@ T["ValidateSpellIDInput rejects"] = function(t)
         { "1 2", "Spell ID must be a whole number." },
         { "0", "Spell ID out of range." }, { "9999999999", "Spell ID out of range." },
         { "99999999999", "Spell ID out of range." }, { "2147483648", "Spell ID out of range." },
+        -- MAX_SPELL_ID itself: the 9-digit check rejects it first, so the
+        -- 9-digit limit (999999999) is the effective upper bound.
+        { "2147483647", "Spell ID out of range." },
     }
     for _, c in ipairs(cases) do
         local id, err = Core.ValidateSpellIDInput(c[1])
